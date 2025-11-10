@@ -22,7 +22,10 @@ const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjkyMjZ
 // Detecta quin port del backend està actiu (8000 o 8001)
 let API_BASE = null;
 async function detectApiBase() {
-  const candidates = ['http://127.0.0.1:8000', 'http://127.0.0.1:8001'];
+  // Antes (local):
+  // const candidates = ['http://127.0.0.1:8000', 'http://127.0.0.1:8001'];
+  // Ahora (online, Render por ejemplo):
+    const candidates = ['https://greenroutes-backend.onrender.com'];
   for (const base of candidates) {
     try {
       const r = await fetch(base + '/');
