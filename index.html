@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8" />
+  <title>GreenRoutes - POC (UI millorada)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #2563eb;
+      --primary-contrast: #fff;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); }
+    header { padding: 14px 18px; background: var(--card); border-bottom: 1px solid var(--border); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    header h1 { font-size: 18px; margin: 0; font-weight: 650; }
+    .badge { font-size: 12px; padding: 2px 8px; background: #e9f0ff; color: var(--primary); border-radius: 999px; border:1px solid #dbe7ff; }
+
+    .container { max-width: 1200px; margin: 14px auto; padding: 0 14px; display:grid; grid-template-columns: 380px 1fr; gap:14px; }
+    @media (max-width: 900px) { .container { grid-template-columns: 1fr; } }
+
+    .panel { background: var(--card); border:1px solid var(--border); border-radius:12px; padding:14px; box-shadow:0 2px 8px rgba(0,0,0,0.04); }
+    .field { margin-bottom: 12px; }
+    .label { font-size: 13px; color: var(--muted); margin-bottom:6px; display:block; }
+    .input-row { position:relative; display:flex; gap:8px; }
+    input[type="text"], select { flex:1; padding:10px 12px; border:1px solid var(--border); border-radius:10px; outline:none; }
+    input[type="text"]:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+    button.primary { padding:10px 14px; background: var(--primary); color: var(--primary-contrast); border:none; border-radius:10px; cursor:pointer; font-weight:600; }
+    button.primary:disabled { opacity:.6; cursor:not-allowed; }
+
+    .suggestions { position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid var(--border); border-radius:10px; margin-top:6px; z-index:1000; max-height:220px; overflow:auto; box-shadow:0 8px 24px rgba(0,0,0,.08); }
+    .sugg-item { padding:8px 10px; cursor:pointer; border-bottom:1px solid #f3f4f6; }
+    .sugg-item:last-child { border-bottom:0; }
+    .sugg-item:hover { background:#f9fafb; }
+
+    .result { background:#f9fafb; border:1px solid var(--border); border-radius:12px; padding:12px; font-size:14px; }
+    .result b { color: var(--text); }
+    .muted { color: var(--muted); font-size:13px; }
+
+    #map { height: 70vh; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+    .footer-note { margin-top: 8px; font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>GreenRoutes</h1>
+    <span class="badge">POC · Mobilitat sostenible</span>
+  </header>
+
+  <div class="container">
+    <section class="panel">
+      <div class="field">
+        <label class="label">Origen</label>
+        <div class="input-row">
+          <input id="origin_name" type="text" placeholder="Ex: Plaça Catalunya, Barcelona" autocomplete="off" />
+          <div id="sugg_origin" class="suggestions" style="display:none;"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="label">Destí</label>
+        <div class="input-row">
+          <input id="dest_name" type="text" placeholder="Ex: Sagrada Família" autocomplete="off" />
+          <div id="sugg_dest" class="suggestions" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Selector de mode (no canvia el backend; s'usa per a OSRM i per al text) -->
+      <div class="field">
+        <label class="label">Mode de ruta</label>
+        <select id="route_mode">
+          <option value="eco">🌱 Mínimes emissions</option>
+          <option value="fast">⚡ Més ràpida</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <button id="calc_btn" class="primary">Calcular ruta</button>
+      </div>
+
+      <div class="result" id="result">
+        <span class="muted">Introdueix origen i destí i prem “Calcular ruta”.</span>
+      </div>
+
+      <p class="footer-note">🌍 Geocodificació via Nominatim (OpenStreetMap). Ruta real via OSRM.</p>
+    </section>
+
+    <section class="panel">
+      <div id="map"></div>
+    </section>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
