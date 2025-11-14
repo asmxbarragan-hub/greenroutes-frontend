@@ -1,9 +1,9 @@
 // ======================================================
-// GreenRoutes - app.js (versió simplificada i estable)
+// GreenRoutes - app.js (versió amb fallback de CO₂ al frontend)
 // - Geocodificació amb Nominatim
 // - Dues rutes amb OpenRouteService (ECO i RÀPIDA)
 // - Dibuixa rutes diferents (bici vs cotxe)
-// - Crida opcional al backend per CO2 (local o Render)
+// - Calcula CO₂ al frontend i, si pot, el demana també al backend
 // ======================================================
 
 // ⚠️ 1) POSA AQUÍ LA TEVA API KEY REAL D'OPENROUTESERVICE
@@ -11,7 +11,7 @@ const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI3YjV
 
 // ⚠️ 2) URL del backend (Render i local). Canvia la de Render pel teu URL exacte.
 const API_CANDIDATES = [
-  "https://greenroutes-backend.onrender.com", // posa aqui el teu backend de Render
+  "https://greenroutes-backend.onrender.com", // posa aquí el teu backend de Render
   "http://127.0.0.1:8000"
 ];
 
@@ -258,11 +258,11 @@ async function calculateRoute() {
     }).addTo(map);
 
     if (mainIsEco) {
-      ecoLayer = mainLayer;
+      ecoLayer  = mainLayer;
       fastLayer = altLayer;
     } else {
       fastLayer = mainLayer;
-      ecoLayer = altLayer;
+      ecoLayer  = altLayer;
     }
 
     map.fitBounds(mainLayer.getBounds(), { padding: [30, 30] });
@@ -272,12 +272,22 @@ async function calculateRoute() {
     const mainDistKm = (mainRoute.distance / 1000).toFixed(2);
     const mainDurMin = Math.round(mainRoute.duration / 60);
 
-    // CO2 i recomanació via backend (si està disponible)
-    let co2Text = "—";
+    // -----------------------------
+    // Fallback de CO₂ al frontend
+    // -----------------------------
+    // Factors d'emissió molt simplificats:
+    // - bici: 30 g/km
+    // - cotxe: 120 g/km
+    const factorEco  = 30;   // g/km (bici)
+    const factorFast = 120;  // g/km (cotxe)
+    const factor     = mainIsEco ? factorEco : factorFast;
+
+    let co2Text = `${Math.round(mainDistKm * factor)} g`; // valor per defecte
     let recText = mainIsEco
       ? "Ruta ECO prioritzada (bici)"
       : "Ruta RÀPIDA prioritzada (cotxe)";
 
+    // Intentar demanar CO₂ al backend, si està disponible
     if (API_BASE === null) {
       API_BASE = await detectApiBase();
       console.log("API_BASE detectada:", API_BASE);
@@ -299,6 +309,7 @@ async function calculateRoute() {
 
         if (resp.ok) {
           const data = await resp.json();
+          // Si el backend respon bé, sobreescrivim el valor
           co2Text = `${data.co2_estimated_g} g`;
           recText = data.recommendation;
         } else {
@@ -309,6 +320,7 @@ async function calculateRoute() {
       }
     }
 
+    // Resultat final a la interfície
     resultBox.innerHTML = `
       <b>Distància ECO (bici):</b> ${ecoDistKm} km ·
       <b>Distància RÀPIDA (cotxe):</b> ${fastDistKm} km<br>
