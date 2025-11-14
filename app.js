@@ -1,44 +1,38 @@
 // ======================================================
-// GreenRoutes - app.js (VERSIÓ COMPLETA DEFINITIVA)
-// - Geocodificació (Nominatim)
-// - Rutes ECO i RÀPIDA amb OpenRouteService
-// - Dibuixa les dues rutes (eco i ràpida) al mapa
-// - Crida al backend (local o Render) per CO₂ i recomanació
+// GreenRoutes - app.js (versió simplificada i estable)
+// - Geocodificació amb Nominatim
+// - Dues rutes amb OpenRouteService (ECO i RÀPIDA)
+// - Dibuixa rutes diferents (bici vs cotxe)
+// - Crida opcional al backend per CO2 (local o Render)
 // ======================================================
 
-
-// -----------------------------
-// 0) Config global
-// -----------------------------
-
-// ⚠️ POSA AQUÍ LA TEVA API KEY D'OPENROUTESERVICE
+// ⚠️ 1) POSA AQUÍ LA TEVA API KEY REAL D'OPENROUTESERVICE
 const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImI3YjVjYmRkM2NjNTFmNGEyYjFmZmQ5OGQwM2Y5MTg3M2FjYTljNmRhOTgwODkzMDFmMDg3ODU0IiwiaCI6Im11cm11cjY0In0=";
 
-// Possible backends per al càlcul de CO₂
-let API_BASE = null;
+// ⚠️ 2) URL del backend (Render i local). Canvia la de Render pel teu URL exacte.
 const API_CANDIDATES = [
-  "https://greenroutes-backend.onrender.com", // canvia-ho si el teu Render té un altre nom
+  "https://greenroutes-backend.onrender.com", // posa aqui el teu backend de Render
   "http://127.0.0.1:8000"
 ];
 
+let API_BASE = null;
+
+// Detecta quin backend està disponible (Render o local)
 async function detectApiBase() {
   for (const base of API_CANDIDATES) {
     try {
       const r = await fetch(base + "/");
       if (r.ok) return base;
-    } catch (_) {
-      // ignorem errors i provem el següent
+    } catch (e) {
+      console.warn("No s'ha pogut contactar amb:", base);
     }
   }
-  return null; // si no hi ha backend disponible
+  return null;
 }
 
-
 // -----------------------------
-// 1) Geocodificació i suggeriments
+// Geocodificació Nominatim
 // -----------------------------
-
-// Converteix el nom d'un lloc a coordenades amb Nominatim (OSM)
 async function geocode(query) {
   const url = new URL("https://nominatim.openstreetmap.org/search");
   url.searchParams.set("q", query);
@@ -49,7 +43,9 @@ async function geocode(query) {
     headers: { "Accept-Language": "ca" }
   });
 
-  if (!resp.ok) throw new Error("Error geocodificant");
+  if (!resp.ok) {
+    throw new Error("Error en la geocodificació");
+  }
 
   const data = await resp.json();
   return data.map((it) => ({
@@ -59,7 +55,7 @@ async function geocode(query) {
   }));
 }
 
-// Afegeix llista de suggeriments sota d'un <input>
+// Llista de suggeriments sota un <input>
 function attachSuggest(inputEl, listEl) {
   let timer = null;
 
@@ -80,14 +76,14 @@ function attachSuggest(inputEl, listEl) {
           listEl.innerHTML = "";
           return;
         }
-
         listEl.innerHTML = res
           .map(
             (r) =>
-              `<div class="sugg-item" data-lat="${r.lat}" data-lon="${r.lon}">${r.name}</div>`
+              `<div class="sugg-item" data-lat="${r.lat}" data-lon="${r.lon}">
+                 ${r.name}
+               </div>`
           )
           .join("");
-
         listEl.style.display = "block";
       } catch (e) {
         console.error(e);
@@ -100,6 +96,7 @@ function attachSuggest(inputEl, listEl) {
   listEl.addEventListener("click", (e) => {
     const el = e.target.closest(".sugg-item");
     if (!el) return;
+
     inputEl.value = el.textContent;
     inputEl.dataset.lat = el.dataset.lat;
     inputEl.dataset.lon = el.dataset.lon;
@@ -113,11 +110,9 @@ function attachSuggest(inputEl, listEl) {
   });
 }
 
-
 // -----------------------------
-// 2) Inicialització del mapa Leaflet
+// Mapa Leaflet
 // -----------------------------
-
 const map = L.map("map").setView([41.3851, 2.1734], 13);
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -127,25 +122,20 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 let originMarker = null;
 let destMarker = null;
-let ecoLayer = null;   // capa ruta eco (verda)
-let fastLayer = null;  // capa ruta ràpida (blava)
-
-
-// -----------------------------
-// 3) Helpers de coordenades
-// -----------------------------
+let ecoLayer = null;    // línia verda
+let fastLayer = null;   // línia blava
 
 const originInput = document.getElementById("origin_name");
 const destInput   = document.getElementById("dest_name");
-const modeSelect  = document.getElementById("route_mode");
 const suggOrigin  = document.getElementById("sugg_origin");
 const suggDest    = document.getElementById("sugg_dest");
+const modeSelect  = document.getElementById("route_mode");
 const resultBox   = document.getElementById("result");
 
 attachSuggest(originInput, suggOrigin);
 attachSuggest(destInput,   suggDest);
 
-// Garanteix que tenim (lat, lon) en un input; si no, geocodifica
+// Assegura que tenim lat/lon a un input; sinó, geocodifica
 async function ensureCoords(inputEl) {
   const name = inputEl.value.trim();
   if (!name) throw new Error("Introdueix un nom de lloc a origen i destí.");
@@ -155,67 +145,62 @@ async function ensureCoords(inputEl) {
 
   if (Number.isNaN(lat) || Number.isNaN(lon)) {
     const [first] = await geocode(name);
-    if (!first) throw new Error(`No s'ha trobat cap resultat per: ${name}`);
+    if (!first) {
+      throw new Error(`No s'ha trobat cap resultat per: ${name}`);
+    }
     lat = first.lat;
     lon = first.lon;
     inputEl.dataset.lat = String(lat);
     inputEl.dataset.lon = String(lon);
-    inputEl.value = first.name; // nom "bonic"
+    inputEl.value = first.name;
   }
 
   return { name, lat, lon };
 }
 
-
 // -----------------------------
-// 4) Rutes amb OpenRouteService
+// Rutes amb OpenRouteService (GET)
 // -----------------------------
 
-// Crida genèrica a ORS per obtenir una ruta amb un perfil concret
-// profile: "cycling-regular", "driving-car", "foot-walking", etc.
+// Demana una ruta a ORS amb GET:
+// profile = "cycling-regular" (eco) o "driving-car" (ràpida)
 async function getORSRoute(profile, start, end) {
-  const body = {
-    coordinates: [
-      [start[1], start[0]],
-      [end[1], end[0]]
-    ]
-  };
+  const startLonLat = `${start[1]},${start[0]}`;
+  const endLonLat   = `${end[1]},${end[0]}`;
 
-  const resp = await fetch(
-    `https://api.openrouteservice.org/v2/directions/${profile}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: ORS_API_KEY,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    }
+  const url = new URL(
+    `https://api.openrouteservice.org/v2/directions/${profile}`
   );
+  url.searchParams.set("api_key", ORS_API_KEY);
+  url.searchParams.set("start", startLonLat);
+  url.searchParams.set("end", endLonLat);
+
+  const resp = await fetch(url.toString());
 
   if (!resp.ok) {
-    console.error("Error ORS:", await resp.text());
-    throw new Error("Error obtenint ruta d'OpenRouteService");
+    const txt = await resp.text();
+    console.error("Error ORS HTTP:", txt);
+    throw new Error("Error en la petició a OpenRouteService");
   }
 
   const data = await resp.json();
+  console.log("Resposta ORS", profile, data); // DEBUG a consola
+
   if (!data.features || !data.features.length) {
-    throw new Error("Resposta d'ORS sense rutes");
+    throw new Error("Resposta d'ORS sense rutes (revisa la API key o el perfil)");
   }
 
   const feat = data.features[0];
   return {
     geometry: feat.geometry,
-    distance: feat.properties.summary.distance, // en metres
-    duration: feat.properties.summary.duration  // en segons
+    distance: feat.properties.summary.distance, // metres
+    duration: feat.properties.summary.duration  // segons
   };
 }
 
-
 // -----------------------------
-// 5) Flux principal: calcular rutes
+// Flux principal: calcular ruta
 // -----------------------------
-
 document.getElementById("calc_btn").addEventListener("click", calculateRoute);
 
 originInput.addEventListener("keydown", (e) => {
@@ -231,7 +216,6 @@ async function calculateRoute() {
   resultBox.textContent = "Calculant rutes...";
 
   try {
-    // 1) Coordenades d'origen i destí
     const o = await ensureCoords(originInput);
     const d = await ensureCoords(destInput);
     const mode = modeSelect.value; // "eco" o "fast"
@@ -239,22 +223,19 @@ async function calculateRoute() {
     const start = [o.lat, o.lon];
     const end   = [d.lat, d.lon];
 
-    // 2) Marcadors al mapa
+    // Marcadors
     if (originMarker) map.removeLayer(originMarker);
     if (destMarker)   map.removeLayer(destMarker);
 
     originMarker = L.marker(start).addTo(map).bindPopup("Origen").openPopup();
     destMarker   = L.marker(end).addTo(map).bindPopup("Destí");
 
-    // 3) Demanar LES DUES rutes a ORS en paral·lel
-    //    - ECO: perfil bici (cycling-regular)
-    //    - FAST: perfil cotxe (driving-car)
+    // Demanem dues rutes: ECO (bici) i RÀPIDA (cotxe)
     const [ecoRoute, fastRoute] = await Promise.all([
       getORSRoute("cycling-regular", start, end),
       getORSRoute("driving-car",    start, end)
     ]);
 
-    // 4) Escollim ruta principal segons el mode triat
     const mainIsEco = (mode === "eco");
     const mainRoute = mainIsEco ? ecoRoute : fastRoute;
     const altRoute  = mainIsEco ? fastRoute : ecoRoute;
@@ -262,45 +243,44 @@ async function calculateRoute() {
     const mainColor = mainIsEco ? "#16a34a" : "#2563eb"; // verd o blau
     const altColor  = mainIsEco ? "#2563eb" : "#16a34a";
 
-    // 5) Esborrem capes anteriors i dibuixem les noves
+    // Esborrem capes anteriors
     if (ecoLayer)  map.removeLayer(ecoLayer);
     if (fastLayer) map.removeLayer(fastLayer);
 
-    // Ruta principal (més gruix)
+    // Ruta principal (gruixuda, opaca)
     const mainLayer = L.geoJSON(mainRoute.geometry, {
       style: { color: mainColor, weight: 6, opacity: 0.95 }
     }).addTo(map);
 
-    // Ruta alternativa (més fina i discontínua)
-    const altLayerLocal = L.geoJSON(altRoute.geometry, {
+    // Ruta alternativa (més fina, discontínua)
+    const altLayer = L.geoJSON(altRoute.geometry, {
       style: { color: altColor, weight: 3, opacity: 0.6, dashArray: "6 6" }
     }).addTo(map);
 
-    // Guardem referències globals (per si cal esborrar després)
     if (mainIsEco) {
       ecoLayer = mainLayer;
-      fastLayer = altLayerLocal;
+      fastLayer = altLayer;
     } else {
       fastLayer = mainLayer;
-      ecoLayer = altLayerLocal;
+      ecoLayer = altLayer;
     }
 
     map.fitBounds(mainLayer.getBounds(), { padding: [30, 30] });
 
-    // 6) Distàncies / durades
-    const ecoDistKm   = (ecoRoute.distance  / 1000).toFixed(2);
-    const fastDistKm  = (fastRoute.distance / 1000).toFixed(2);
-    const mainDistKm  = (mainRoute.distance / 1000).toFixed(2);
-    const mainDurMin  = Math.round(mainRoute.duration / 60);
+    const ecoDistKm  = (ecoRoute.distance  / 1000).toFixed(2);
+    const fastDistKm = (fastRoute.distance / 1000).toFixed(2);
+    const mainDistKm = (mainRoute.distance / 1000).toFixed(2);
+    const mainDurMin = Math.round(mainRoute.duration / 60);
 
-    // 7) CO₂ i recomanació des del backend (si disponible)
+    // CO2 i recomanació via backend (si està disponible)
     let co2Text = "—";
     let recText = mainIsEco
-      ? "Ruta verda prioritzada"
-      : "Ruta ràpida prioritzada";
+      ? "Ruta ECO prioritzada (bici)"
+      : "Ruta RÀPIDA prioritzada (cotxe)";
 
     if (API_BASE === null) {
       API_BASE = await detectApiBase();
+      console.log("API_BASE detectada:", API_BASE);
     }
 
     if (API_BASE) {
@@ -313,7 +293,7 @@ async function calculateRoute() {
             start_lon: o.lon,
             end_lat:   d.lat,
             end_lon:   d.lon,
-            mode:      mode // "eco" o "fast"
+            mode:      mode
           })
         });
 
@@ -321,28 +301,29 @@ async function calculateRoute() {
           const data = await resp.json();
           co2Text = `${data.co2_estimated_g} g`;
           recText = data.recommendation;
+        } else {
+          console.warn("Error HTTP backend:", resp.status);
         }
       } catch (e) {
         console.warn("No s'ha pogut contactar amb el backend per CO₂:", e);
       }
     }
 
-    // 8) Text final
     resultBox.innerHTML = `
-      <b>Distància eco:</b> ${ecoDistKm} km &nbsp;|&nbsp;
-      <b>Distància ràpida:</b> ${fastDistKm} km<br>
-      <b>Distància utilitzada:</b> ${mainDistKm} km &nbsp;·&nbsp;
+      <b>Distància ECO (bici):</b> ${ecoDistKm} km ·
+      <b>Distància RÀPIDA (cotxe):</b> ${fastDistKm} km<br>
+      <b>Distància usada:</b> ${mainDistKm} km ·
       <b>Durada estimada:</b> ${mainDurMin} min<br>
       <b>CO₂ estimat:</b> ${co2Text}<br>
       <b>Recomanació:</b> ${recText}<br>
       <span class="muted">
-        🌱 Ruta ECO (línia verda) i ⚡ Ruta RÀPIDA (línia blava) es calculen amb perfils diferents d'OpenRouteService,
-        per això el camí és diferent en cada mode.
+        Línia verda = perfil bicicleta (cycling-regular).<br>
+        Línia blava = perfil cotxe (driving-car).
       </span>
     `;
-  } catch (err) {
-    console.error(err);
-    resultBox.textContent = err.message || "Error en el càlcul de la ruta.";
+  } catch (e) {
+    console.error(e);
+    resultBox.textContent = e.message || "Error en el càlcul de la ruta.";
   } finally {
     btn.disabled = false;
   }
